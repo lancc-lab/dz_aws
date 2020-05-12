@@ -1,23 +1,52 @@
--  hosts: localhost
-   gather_facts: False
-   vars:
-     hostname: nginx
-     keypair: my_key1
-     instance_type: t2.micro
-     security_group: EC2SecurityGroup
-     image: ami-085925f297f89fce1
-     region: us-east-1 
-   tasks:
-    - name: Launch instance
-      ec2:
+- name: Create instance
+  hosts: localhost
+  gather_facts: no
+  
+  vars:
+    region: us-east-1
+    instance_type: t2.micro
+    ami: ami-085925f297f89fce1  
+    keypair: my_key1
+    
+  tasks:
+    - name: Create an ec2 instance
+      ec2_instance:    
+         name: "hw-ansible"
          key_name: "{{ keypair }}"
-         group: "{{ security_group }}"
-         instance_type: "{{ instance_type }}"
-         image: "{{ image }}"
-         region: "{{ region }}"
-         count: 1 
-         wait: true
+         security_group: launch-wizard-2
+         instance_type: "{{ instance_type}}"
+         image_id: "{{ ami }}"
+         wait: true 
          user_data: |
                     #!/bin/sh
-                    sudo apt-get install nginx -y
+                    sudo apt-get install -y python 
+         region: "{{ region }}"
+         
       register: ec2
+
+    - debug:
+        msg: "ip addres instance  =  {{ ec2.instances[0]| json_query('public_ip_address') }}"
+  
+    - name: Add new instance to hosts and hw group
+      add_host:
+        hostname: "{{ ec2.instances[0]| json_query('public_ip_address') }}"
+        groups: hw
+    
+- name: Install nginx
+  hosts: hw
+  remote_user: ubuntu
+  become: yes 
+  
+  tasks:
+   - name: Install nginx
+     apt:
+       name: nginx
+       state: latest
+         
+   - name: Upload default index.html for host
+     copy: src=~/site/index.html dest=/var/www/html/index.html
+
+   - name: Start service nginx, if not started
+     service:
+       name: nginx
+       state: started
